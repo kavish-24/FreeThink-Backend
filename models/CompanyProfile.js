@@ -64,6 +64,12 @@ rejectionReason: {
     allowNull: true,
     field: 'number_of_employees',
   },
+  submitted_at: {
+  type: DataTypes.DATE,
+  allowNull: false,
+  defaultValue: DataTypes.NOW
+}
+
 }, {
   tableName: 'company_profiles',
   timestamps: false,

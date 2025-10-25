@@ -9,7 +9,9 @@ const {
   applyToJob, 
   getMyApplications, 
   getCompanyCandidates,
-  updateApplicationStatus
+  updateApplicationStatus,
+  getApplicationAnalytics,
+  checkApplicationStatus
 } = require('../controllers/jobApplicationController');
 
 // Add logging wrapper around middleware to detect hangs
@@ -287,5 +289,8 @@ router.get('/stats',
     }
   }
 );
+
+// Check if user has already applied to a specific job
+router.get('/check/:jobId', isLoggedIn, checkApplicationStatus);
 
 module.exports = router;
