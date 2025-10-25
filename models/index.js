@@ -11,6 +11,9 @@ const UserEducation = require('./UserEducation');
 const UserExperience = require('./UserExperience');
 const Notification = require("./Notification")(sequelize, DataTypes); // <-- add this
 const Note = require("./Note")(sequelize, DataTypes);
+const Broadcast = require('./Broadcast');
+const Conversation = require('./Conversation');
+const Message = require('./Message');
 // associations
 User.hasMany(Notification, { foreignKey: "user_id", as: "notifications" });
 Notification.belongsTo(User, { foreignKey: "user_id", as: "user" });
@@ -111,6 +114,105 @@ UserExperience.belongsTo(User, {
   as: 'user',
 });
 
+// Broadcast associations
+User.hasMany(Broadcast, {
+  foreignKey: 'senderId',
+  as: 'broadcasts',
+  onDelete: 'CASCADE'
+});
+
+Broadcast.belongsTo(User, {
+  foreignKey: 'senderId',
+  as: 'sender'
+});
+
+Job.hasMany(Broadcast, {
+  foreignKey: 'targetJobId',
+  as: 'broadcasts',
+  onDelete: 'SET NULL'
+});
+
+Broadcast.belongsTo(Job, {
+  foreignKey: 'targetJobId',
+  as: 'targetJob'
+});
+
+// Conversation associations
+User.hasMany(Conversation, {
+  foreignKey: 'employerId',
+  as: 'employerConversations',
+  onDelete: 'CASCADE'
+});
+
+User.hasMany(Conversation, {
+  foreignKey: 'jobSeekerId',
+  as: 'jobSeekerConversations',
+  onDelete: 'CASCADE'
+});
+
+Conversation.belongsTo(User, {
+  foreignKey: 'employerId',
+  as: 'employer'
+});
+
+Conversation.belongsTo(User, {
+  foreignKey: 'jobSeekerId',
+  as: 'jobSeeker'
+});
+
+Job.hasMany(Conversation, {
+  foreignKey: 'jobId',
+  as: 'conversations',
+  onDelete: 'SET NULL'
+});
+
+Conversation.belongsTo(Job, {
+  foreignKey: 'jobId',
+  as: 'job'
+});
+
+// Message associations
+Conversation.hasMany(Message, {
+  foreignKey: 'conversationId',
+  as: 'messages',
+  onDelete: 'CASCADE'
+});
+
+Message.belongsTo(Conversation, {
+  foreignKey: 'conversationId',
+  as: 'conversation'
+});
+
+User.hasMany(Message, {
+  foreignKey: 'senderId',
+  as: 'sentMessages',
+  onDelete: 'CASCADE'
+});
+
+User.hasMany(Message, {
+  foreignKey: 'receiverId',
+  as: 'receivedMessages',
+  onDelete: 'CASCADE'
+});
+
+Message.belongsTo(User, {
+  foreignKey: 'senderId',
+  as: 'sender'
+});
+
+Message.belongsTo(User, {
+  foreignKey: 'receiverId',
+  as: 'receiver'
+});
+
+// Add lastMessage association for conversations
+Conversation.hasMany(Message, {
+  foreignKey: 'conversationId',
+  as: 'lastMessage',
+  limit: 1,
+  order: [['createdAt', 'DESC']]
+});
+
 
 module.exports = {
   sequelize,
@@ -123,7 +225,10 @@ module.exports = {
   JobApplication,
   UserEducation,
   UserExperience,
-    Notification,
-    Note, 
+  Notification,
+  Note,
+  Broadcast,
+  Conversation,
+  Message,
 };
 

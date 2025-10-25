@@ -33,15 +33,24 @@ const notificationsRouter = require('./routes/notificationRoutes');
 const noteRoutes = require('./routes/noteRoutes');
 const recommendationRoutes = require('./routes/recommendations');
 const resumeBuilderRoutes = require('./routes/resumeBuilder'); 
+const broadcastRoutes = require('./routes/broadcasts');
+const messageRoutes = require('./routes/messages'); 
 
 // Create Express app
 const app = express();
 
 // Middlewar
 
+// CORS configuration with environment variables
+const allowedOrigins = [
+  process.env.FRONTEND_URL
+].filter(Boolean); // Remove any undefined values
+
 app.use(cors({
-  origin: ['http://localhost:9000', 'http://localhost:9001'],  // allow your frontend origin
-  credentials: true                 // allow cookies/credentials
+  origin: allowedOrigins,
+  credentials: true,                 // allow cookies/credentials
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
 app.use(helmet());
@@ -66,6 +75,8 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/notes', noteRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/resume-builder', resumeBuilderRoutes);
+app.use('/api/broadcasts', broadcastRoutes);
+app.use('/api/messages', messageRoutes);
 // Health check endpoint
 app.get('/', (_, res) => res.status(200).json({ status: 'ok', message: 'Job Portal API is running' }));
 
