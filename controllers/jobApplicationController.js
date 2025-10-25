@@ -989,7 +989,7 @@ exports.updateApplicationStatus = async (req, res) => {
       }
       
       if (notificationMessage) {
-        await createNotification(application.jobSeeker.id, notificationMessage);
+        await createNotification(application.jobSeeker.id, notificationMessage, 'application', null, null, req.io);
       }
     } catch (notificationError) {
       console.warn('Failed to create notification:', notificationError.message);

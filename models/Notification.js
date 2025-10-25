@@ -16,7 +16,24 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
+      type: {
+        type: DataTypes.STRING,
+        defaultValue: 'info',
+        allowNull: false,
+      },
+      action_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      action_text: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       seen: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      read: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },

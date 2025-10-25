@@ -19,7 +19,7 @@ router.post("/send", async (req, res) => {
     // create notification if user exists
     const user = await User.findOne({ where: { email: to } });
     if (user) {
-      await createNotification(user.id, "You have received a new email from the company.");
+      await createNotification(user.id, "You have received a new email from the company.", 'email', null, null, req.io);
     }
 
     res.json({ message: "Email sent successfully" });
@@ -49,7 +49,7 @@ router.post("/bulk", async (req, res) => {
     for (let email of recipients) {
       const user = await User.findOne({ where: { email } });
       if (user) {
-        await createNotification(user.id, "You have received a new email from the company.");
+        await createNotification(user.id, "You have received a new email from the company.", 'email', null, null, req.io);
       }
     }
 

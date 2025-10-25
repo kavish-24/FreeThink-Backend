@@ -34,6 +34,25 @@ router.get("/:userId", async (req, res) => {
   }
 });
 
+// ✅ Get unread notification count for a user
+// GET /unread-count/:userId
+// Returns: { count: Number }
+router.get("/unread-count/:userId", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const count = await Notification.count({
+      where: { 
+        user_id: userId,
+        seen: false
+      }
+    });
+    res.json({ count });
+  } catch (err) {
+    console.error("Error fetching unread notification count:", err);
+    res.status(500).json({ error: "Failed to fetch unread notification count", details: err.message });
+  }
+});
+
 // ✅ Get single notification by ID
 // GET /single/:id
 // Returns: Notification object

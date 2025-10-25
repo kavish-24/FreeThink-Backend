@@ -243,7 +243,19 @@ const messageController = {
         ]
       });
 
-      // Emit real-time event via WebSocket if available
+      // Create notification for the receiver
+      try {
+        const { createNotification } = require('../utils/notificationService');
+        const senderName = completeMessage.sender?.name || 'Unknown User';
+        const notificationMessage = `New message from ${senderName}`;
+        
+        await createNotification(receiverId, notificationMessage, 'message', `/messages?conversation=${conversationId}`, 'View Message', req.io);
+      } catch (notificationError) {
+        console.warn('Failed to create notification for new message:', notificationError.message);
+        // Don't fail the message send if notification fails
+      }
+
+      // Emit real-time event via WebSocket
       if (req.io) {
         req.io.to(`conversation_${conversationId}`).emit('new_message', completeMessage);
       }
@@ -341,7 +353,7 @@ const messageController = {
       if (initialMessage && initialMessage.trim()) {
         const receiverId = userRole === 'company' ? jobSeekerId : employerId;
         
-        await Message.create({
+        const message = await Message.create({
           conversationId: conversation.id,
           senderId: userId,
           receiverId,
@@ -361,6 +373,19 @@ const messageController = {
             transaction
           }
         );
+
+        // Create notification for the receiver of the initial message
+        try {
+          const { createNotification } = require('../utils/notificationService');
+          const sender = await User.findByPk(userId, { attributes: ['name'] });
+          const senderName = sender?.name || 'Unknown User';
+          const notificationMessage = `New message from ${senderName}`;
+          
+          await createNotification(receiverId, notificationMessage, 'message', `/messages?conversation=${conversation.id}`, 'View Message', req.io);
+        } catch (notificationError) {
+          console.warn('Failed to create notification for initial message:', notificationError.message);
+          // Don't fail the conversation creation if notification fails
+        }
       }
 
       await transaction.commit();
@@ -474,7 +499,7 @@ const messageController = {
         { where: { id: conversationId } }
       );
 
-      // Emit real-time event if WebSocket is available
+      // Emit real-time event
       if (req.io) {
         req.io.to(`conversation_${conversationId}`).emit('message_read', {
           conversationId,

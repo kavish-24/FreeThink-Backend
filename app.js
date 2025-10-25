@@ -4,6 +4,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const socketIo = require('socket.io');
 require('dotenv').config();
 require('./jobsCron'); // path to your cron file
 
@@ -39,6 +41,20 @@ const messageRoutes = require('./routes/messages');
 // Create Express app
 const app = express();
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create Socket.IO server
+const io = socketIo(server, {
+  cors: {
+    origin: [
+      process.env.FRONTEND_URL
+    ].filter(Boolean),
+    credentials: true,
+    methods: ['GET', 'POST']
+  }
+});
+
 // Middlewar
 
 // CORS configuration with environment variables
@@ -55,6 +71,12 @@ app.use(cors({
 
 app.use(helmet());
 app.use(express.json());
+
+// Make Socket.IO available in request objects
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -92,11 +114,44 @@ app.use((err, req, res, next) => {
 
 app.use('/api', profileRoutes);
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Endpoint not found'
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Handle joining a conversation room
+  socket.on('join_conversation', (data) => {
+    const { conversationId } = data;
+    socket.join(`conversation_${conversationId}`);
+    console.log(`User ${socket.id} joined conversation ${conversationId}`);
+  });
+
+  // Handle leaving a conversation room
+  socket.on('leave_conversation', (data) => {
+    const { conversationId } = data;
+    socket.leave(`conversation_${conversationId}`);
+    console.log(`User ${socket.id} left conversation ${conversationId}`);
+  });
+
+  // Handle typing events
+  socket.on('typing', (data) => {
+    const { conversationId } = data;
+    socket.to(`conversation_${conversationId}`).emit('typing', {
+      conversationId,
+      userId: socket.userId // Will be set when user authenticates
+    });
+  });
+
+  socket.on('stop_typing', (data) => {
+    const { conversationId } = data;
+    socket.to(`conversation_${conversationId}`).emit('stop_typing', {
+      conversationId,
+      userId: socket.userId
+    });
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
   });
 });
 
@@ -116,8 +171,9 @@ const startServer = async () => {
     }
     
     // Start the server
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log('WebSocket server is ready');
     });
   } catch (error) {
     console.error('Unable to connect to the database:', error);
