@@ -14,6 +14,7 @@ router.delete('/conversations/:conversationId', messageController.deleteConversa
 // Message routes
 router.get('/conversations/:conversationId/messages', messageController.getMessages);
 router.post('/messages', messageController.sendMessage);
+router.delete('/messages/:messageId', messageController.deleteMessage);
 router.put('/conversations/:conversationId/read', messageController.markAsRead);
 router.get('/unread-count', messageController.getUnreadCount);
 

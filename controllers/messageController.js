@@ -1,4 +1,6 @@
 const { Message, Conversation, User, Job, sequelize } = require('../models');
+const JobSeekerProfile = require('../models/JobSeekerProfile');
+const CompanyProfile = require('../models/CompanyProfile');
 const { Op } = require('sequelize');
 
 const messageController = {
@@ -24,12 +26,22 @@ const messageController = {
           {
             model: User,
             as: 'employer',
-            attributes: ['id', 'name', 'email']
+            attributes: ['id', 'name', 'email'],
+            include: [{
+              model: CompanyProfile,
+              as: 'companyProfile',
+              attributes: ['logo']
+            }]
           },
           {
             model: User,
             as: 'jobSeeker',
-            attributes: ['id', 'name', 'email']
+            attributes: ['id', 'name', 'email'],
+            include: [{
+              model: JobSeekerProfile,
+              as: 'jobSeekerProfile',
+              attributes: ['photoUrl']
+            }]
           },
           {
             model: Job,
@@ -49,10 +61,20 @@ const messageController = {
             attributes: ['content', 'createdAt', 'senderId', 'messageType']
           });
 
+          const participant = userRole === 'company' ? conv.jobSeeker : conv.employer;
+          const profilePicture = userRole === 'company' 
+            ? participant?.jobSeekerProfile?.photoUrl 
+            : participant?.companyProfile?.logo;
+
           return {
             id: conv.id,
             title: conv.title,
-            participant: userRole === 'company' ? conv.jobSeeker : conv.employer,
+            participant: {
+              id: participant?.id,
+              name: participant?.name,
+              email: participant?.email,
+              profilePicture: profilePicture
+            },
             job: conv.job,
             lastMessage: lastMessage || null,
             unreadCount: userRole === 'company' ? conv.employerUnreadCount : conv.jobSeekerUnreadCount,
@@ -546,6 +568,55 @@ const messageController = {
       res.json({
         success: true,
         unreadCount: result || 0
+      });
+    } catch (error) {
+      console.error('Error getting unread count:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get unread count',
+        error: error.message
+      });
+    }
+  },
+
+  // Delete a message
+  deleteMessage: async (req, res) => {
+    try {
+      const { messageId } = req.params;
+      const userId = req.user.id;
+
+      // Find the message
+      const message = await Message.findByPk(messageId);
+
+      if (!message) {
+        return res.status(404).json({
+          success: false,
+          message: 'Message not found'
+        });
+      }
+
+      // Verify the user is the sender of the message
+      if (message.senderId !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete your own messages'
+        });
+      }
+
+      // Delete the message
+      await message.destroy();
+
+      // Emit real-time event to notify others
+      if (req.io) {
+        req.io.to(`conversation_${message.conversationId}`).emit('message_deleted', {
+          messageId,
+          conversationId: message.conversationId
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Message deleted successfully'
       });
     } catch (error) {
       console.error('Error getting unread count:', error);
