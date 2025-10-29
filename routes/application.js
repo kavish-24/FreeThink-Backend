@@ -293,4 +293,147 @@ router.get('/stats',
 // Check if user has already applied to a specific job
 router.get('/check/:jobId', isLoggedIn, checkApplicationStatus);
 
+// Get applicant count per job (for a single job)
+router.get('/count/:jobId',
+  async (req, res) => {
+    try {
+      const { JobApplication } = require('../models');
+      const jobId = parseInt(req.params.jobId);
+
+      if (isNaN(jobId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid job ID format'
+        });
+      }
+
+      const count = await JobApplication.count({
+        where: { job_id: jobId }
+      });
+
+      res.json({
+        success: true,
+        jobId: jobId,
+        applicantCount: count
+      });
+    } catch (error) {
+      console.error('Error fetching applicant count:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch applicant count'
+      });
+    }
+  }
+);
+
+// Get applicant counts for multiple jobs (for company dashboard)
+router.post('/counts',
+  async (req, res) => {
+    try {
+      const { JobApplication } = require('../models');
+      const { jobIds } = req.body;
+
+      if (!Array.isArray(jobIds) || jobIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'jobIds array is required'
+        });
+      }
+
+      // Validate all job IDs are numbers
+      const validJobIds = jobIds.filter(id => !isNaN(parseInt(id))).map(id => parseInt(id));
+
+      if (validJobIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No valid job IDs provided'
+        });
+      }
+
+      const counts = await JobApplication.findAll({
+        where: { job_id: validJobIds },
+        attributes: [
+          'job_id',
+          [JobApplication.sequelize.fn('COUNT', '*'), 'count']
+        ],
+        group: ['job_id'],
+        raw: true
+      });
+
+      // Transform to object format { jobId: count }
+      const countsObj = {};
+      validJobIds.forEach(jobId => {
+        countsObj[jobId] = 0; // Initialize with 0
+      });
+
+      counts.forEach(item => {
+        countsObj[item.job_id] = parseInt(item.count);
+      });
+
+      res.json({
+        success: true,
+        counts: countsObj
+      });
+    } catch (error) {
+      console.error('Error fetching applicant counts:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch applicant counts'
+      });
+    }
+  }
+);
+
+// Get applicant count per job for a company
+router.get('/company/:companyId/counts',
+  async (req, res) => {
+    try {
+      const { JobApplication, Job } = require('../models');
+      const companyId = parseInt(req.params.companyId);
+
+      if (isNaN(companyId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid company ID format'
+        });
+      }
+
+      const counts = await JobApplication.findAll({
+        attributes: [
+          'job_id',
+          [JobApplication.sequelize.fn('COUNT', '*'), 'applicant_count']
+        ],
+        include: [{
+          model: Job,
+          as: 'job',
+          attributes: ['id', 'title'],
+          where: { company_id: companyId },
+          required: true
+        }],
+        group: ['job_id', 'job.id', 'job.title'],
+        raw: false
+      });
+
+      // Format the response
+      const formattedCounts = counts.map(item => ({
+        jobId: item.job_id,
+        jobTitle: item.job?.title,
+        applicantCount: parseInt(item.dataValues.applicant_count)
+      }));
+
+      res.json({
+        success: true,
+        companyId: companyId,
+        jobCounts: formattedCounts
+      });
+    } catch (error) {
+      console.error('Error fetching company job counts:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch applicant counts for company jobs'
+      });
+    }
+  }
+);
+
 module.exports = router;
