@@ -792,7 +792,15 @@ exports.applyToJob = async (req, res) => {
       if (combinedText.trim()) {
         const scoringResult = await scoreResume(combinedText, job);
         atsScore = scoringResult.score;
-        atsFeedback = scoringResult.feedback;
+        
+        // Ensure feedback is a string
+        let feedback = scoringResult.feedback;
+        if (Array.isArray(feedback)) {
+          feedback = feedback.join('\n');
+        } else if (typeof feedback === 'object') {
+          feedback = JSON.stringify(feedback);
+        }
+        atsFeedback = feedback ? feedback.toString() : 'No feedback provided';
       }
     } catch (scoringError) {
       console.error('ATS scoring failed:', scoringError.message);

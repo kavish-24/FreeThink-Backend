@@ -248,20 +248,31 @@ router.get('/stats',
   logMiddleware('isLoggedIn', isLoggedIn),
   async (req, res) => {
     try {
-      const { JobApplication } = require('../models');
-      const job_seeker_id = req.user.id;
+      const { JobApplication, Job } = require('../models');
+      const company_id = req.user.id;
 
-      const stats = await JobApplication.findAll({
-        where: { job_seeker_id },
+      console.log('Fetching company stats for company_id:', company_id);
+
+      // Get all applications for jobs posted by this company
+      const applications = await JobApplication.findAll({
+        include: [{
+          model: Job,
+          as: 'job',
+          where: { company_id }, // Filter for jobs posted by this company
+          attributes: ['id', 'title']
+        }],
         attributes: [
           'status',
-          [JobApplication.sequelize.fn('COUNT', '*'), 'count']
+          [JobApplication.sequelize.fn('COUNT', JobApplication.sequelize.col('JobApplication.id')), 'count']
         ],
-        group: ['status'],
+        group: ['status', 'job.id', 'job.title'],
         raw: true
       });
 
-      // Transform to object format
+      console.log('Raw applications data:', applications);
+
+      // Initialize stats object
+      // Initialize stats object
       const statsObj = {
         total: 0,
         applied: 0,
@@ -271,20 +282,33 @@ router.get('/stats',
         withdrawn: 0
       };
 
-      stats.forEach(stat => {
-        statsObj[stat.status] = parseInt(stat.count);
-        statsObj.total += parseInt(stat.count);
+      // Process applications data
+      applications.forEach(app => {
+        const count = parseInt(app.count) || 0;
+        if (app.status && typeof statsObj[app.status] !== 'undefined') {
+          statsObj[app.status] += count;
+          statsObj.total += count;
+        }
       });
+
+      // Log the user info and query parameters for debugging
+      console.log('User ID:', job_seeker_id);
+      console.log('User object:', req.user);
+      console.log('Final stats object:', statsObj);
+
+      console.log('Final stats object:', statsObj);
 
       res.json({
         success: true,
         stats: statsObj
       });
     } catch (error) {
-      console.error('Error fetching application stats:', error);
+      console.error('Error fetching application stats:', error.message);
+      console.error('Error stack:', error.stack);
       res.status(500).json({
         success: false,
-        message: 'Failed to fetch application statistics'
+        message: 'Failed to fetch application statistics',
+        error: error.message
       });
     }
   }
@@ -383,6 +407,193 @@ router.post('/counts',
     }
   }
 );
+
+// Get company application statistics
+router.get('/company-stats',
+  logMiddleware('isLoggedIn', isLoggedIn),
+  async (req, res) => {
+    try {
+      const { JobApplication, Job } = require('../models');
+      const company_id = req.user.id;
+
+      console.log('Fetching company stats for company_id:', company_id);
+
+      // Get all applications for jobs posted by this company
+      const applications = await JobApplication.findAll({
+        include: [{
+          model: Job,
+          as: 'job',
+          where: { company_id },
+          attributes: ['id', 'title']
+        }],
+        attributes: [
+          'status',
+          [JobApplication.sequelize.fn('COUNT', JobApplication.sequelize.col('JobApplication.id')), 'count']
+        ],
+        group: ['status', 'job.id', 'job.title'],
+        raw: true
+      });
+
+      // Initialize stats object
+      const stats = {
+        total: 0,
+        applied: 0,
+        under_review: 0,
+        approved: 0,
+        rejected: 0,
+        withdrawn: 0
+      };
+
+      // Process applications data
+      applications.forEach(app => {
+        const count = parseInt(app.count) || 0;
+        if (app.status && typeof stats[app.status] !== 'undefined') {
+          stats[app.status] += count;
+          stats.total += count;
+        }
+      });
+
+      res.json({
+        success: true,
+        stats,
+        details: {
+          total_active_jobs: [...new Set(applications.map(a => a['job.id']))].length,
+          most_active_job: applications.reduce((max, curr) => {
+            const count = parseInt(curr.count) || 0;
+            return count > (max.count || 0) ? { 
+              jobId: curr['job.id'], 
+              jobTitle: curr['job.title'], 
+              count 
+            } : max;
+          }, {}),
+          recent_applications: applications.slice(0, 5).map(app => ({
+            jobId: app['job.id'],
+            jobTitle: app['job.title'],
+            status: app.status,
+            count: parseInt(app.count) || 0
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching company application stats:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch application statistics',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  });
+
+// Get application trends for charts (last 7 days)
+router.get('/trends',
+  logMiddleware('isLoggedIn', isLoggedIn),
+  async (req, res) => {
+    try {
+      const { JobApplication, Job } = require('../models');
+      const { Op } = require('sequelize');
+      const company_id = req.user.id;
+
+      console.log('Fetching application trends for company_id:', company_id);
+
+      // Calculate date range for last 7 days
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 6); // Last 7 days including today
+
+      // Format dates for SQL query (YYYY-MM-DD)
+      const formatDate = (date) => {
+        return date.toISOString().split('T')[0];
+      };
+
+      const startDateStr = formatDate(startDate);
+      const endDateStr = formatDate(endDate);
+
+      console.log('Date range:', startDateStr, 'to', endDateStr);
+
+      // Get applications grouped by date and status for the last 7 days
+      const trendsData = await JobApplication.findAll({
+        attributes: [
+          [JobApplication.sequelize.fn('DATE', JobApplication.sequelize.col('JobApplication.applied_at')), 'date'],
+          'status',
+          [JobApplication.sequelize.fn('COUNT', JobApplication.sequelize.col('JobApplication.id')), 'count']
+        ],
+        include: [{
+          model: Job,
+          as: 'job',
+          where: { company_id },
+          attributes: []
+        }],
+        where: {
+          applied_at: {
+            [Op.between]: [startDateStr + ' 00:00:00', endDateStr + ' 23:59:59']
+          }
+        },
+        group: [
+          JobApplication.sequelize.fn('DATE', JobApplication.sequelize.col('JobApplication.applied_at')),
+          'status'
+        ],
+        order: [
+          [JobApplication.sequelize.fn('DATE', JobApplication.sequelize.col('JobApplication.applied_at')), 'ASC']
+        ],
+        raw: true
+      });
+
+      console.log('Raw trends data:', trendsData);
+
+      // Generate all dates in range
+      const dateArray = [];
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        dateArray.push(formatDate(new Date(currentDate)));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Initialize data structure for all dates and statuses
+      const statusTypes = ['applied', 'under_review', 'approved', 'rejected', 'withdrawn'];
+      const trendsResult = {
+        dates: dateArray,
+        series: statusTypes.map(status => ({
+          name: status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          data: dateArray.map(() => 0)
+        }))
+      };
+
+      // Fill in actual data
+      trendsData.forEach(item => {
+        const dateIndex = dateArray.indexOf(item.date);
+        const seriesIndex = statusTypes.indexOf(item.status);
+        
+        if (dateIndex !== -1 && seriesIndex !== -1) {
+          trendsResult.series[seriesIndex].data[dateIndex] = parseInt(item.count) || 0;
+        }
+      });
+
+      // Format dates for display (e.g., "Nov 01")
+      trendsResult.categories = dateArray.map(date => {
+        const d = new Date(date + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+      });
+
+      console.log('Processed trends result:', trendsResult);
+
+      res.json({
+        success: true,
+        data: trendsResult,
+        meta: {
+          start_date: startDateStr,
+          end_date: endDateStr,
+          total_days: dateArray.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching application trends:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch application trends',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  });
 
 // Get applicant count per job for a company
 router.get('/company/:companyId/counts',
