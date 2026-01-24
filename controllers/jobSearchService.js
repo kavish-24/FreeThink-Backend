@@ -50,8 +50,7 @@ async function searchJobsByQuery(query) {
       {
         model: CompanyProfile,
         as: 'company',
-        attributes: ['company_name'],
-        where: { status: 'approved' }
+        attributes: ['company_name']
       }
     ]
   });
